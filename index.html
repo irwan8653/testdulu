@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Batu Gunting Kertas Online</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>🪨✂️📄 Batu Gunting Kertas Online</h1>
+
+      <div class="form">
+        <input type="text" id="playerName" placeholder="🧑‍🎤 Nama kamu" />
+        <input type="text" id="roomCode" placeholder="🎮 Kode room" />
+        <button onclick="joinRoom()">Gabung Room</button>
+      </div>
+
+      <div id="gameArea" style="display: none">
+        <p>👤 Kamu: <span id="myName"></span></p>
+        <p>👥 Lawan: <span id="opponentName">Menunggu lawan...</span></p>
+
+        <h2>Pilih:</h2>
+        <div class="buttons">
+          <button onclick="makeMove('batu')">🪨 Batu</button>
+          <button onclick="makeMove('gunting')">✂️ Gunting</button>
+          <button onclick="makeMove('kertas')">📄 Kertas</button>
+        </div>
+
+        <h3 id="status">Menunggu pilihan...</h3>
+
+        <div class="scores">
+          <p>🏆 Skor Kamu: <span id="myScore">0</span></p>
+          <p>🥈 Skor Lawan: <span id="opponentScore">0</span></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+    <script>
+      const firebaseConfig = {
+        apiKey: "AIzaSyCXU7oqo3m3ry7om9qQ5zfOGTu-mL_YOrc",
+        authDomain: "realtime-database-99f23.firebaseapp.com",
+        databaseURL: "https://realtime-database-99f23-default-rtdb.firebaseio.com",
+        projectId: "realtime-database-99f23",
+        storageBucket: "realtime-database-99f23.firebasestorage.app",
+        messagingSenderId: "642043922874",
+        appId: "1:642043922874:web:4df5d383e2867bcd2cf583",
+        measurementId: "G-EC3HJ1CLMJ"
+      };
+
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.database();
+
+      let playerId = "";
+      let playerName = "";
+      let room = "";
+      let opponentId = "";
+
+      function joinRoom() {
+        room = document.getElementById("roomCode").value.trim();
+        playerName = document.getElementById("playerName").value.trim();
+
+        if (!room || !playerName) return alert("Isi nama dan kode room!");
+
+        const roomRef = db.ref(`rooms/${room}`);
+
+        roomRef.once("value", (snapshot) => {
+          const data = snapshot.val() || {};
+          const playerKeys = Object.keys(data);
+
+          if (playerKeys.length >= 2) {
+            alert("Room sudah penuh!");
+            return;
+          }
+
+          playerId = playerKeys.includes("player1") ? "player2" : "player1";
+
+          roomRef.child(playerId).set({
+            name: playerName,
+            move: null,
+            score: 0,
+          });
+
+          document.getElementById("gameArea").style.display = "block";
+          document.getElementById("myName").innerText = playerName;
+
+          listenForPlayers();
+        });
+      }
+
+      function listenForPlayers() {
+        db.ref(`rooms/${room}`).on("value", (snapshot) => {
+          const data = snapshot.val();
+          if (!data) return;
+
+          const players = Object.keys(data);
+          if (players.length < 2) {
+            document.getElementById("opponentName").innerText = "Menunggu lawan...";
+            return;
+          }
+
+          opponentId = players.find((p) => p !== playerId);
+          const myData = data[playerId];
+          const oppData = data[opponentId];
+
+          document.getElementById("opponentName").innerText = oppData.name || "Lawan";
+          document.getElementById("myScore").innerText = myData.score || 0;
+          document.getElementById("opponentScore").innerText = oppData.score || 0;
+
+          const move1 = myData.move;
+          const move2 = oppData.move;
+
+          if (move1 && move2) {
+            let result = checkWinner(move1, move2);
+
+            if (result === "draw") {
+              document.getElementById("status").innerText = `Seri! (${move1} vs ${move2})`;
+            } else if (result === move1) {
+              document.getElementById("status").innerText = "Kamu menang!";
+              db.ref(`rooms/${room}/${playerId}/score`).set(myData.score + 1);
+            } else {
+              document.getElementById("status").innerText = "Kamu kalah!";
+              db.ref(`rooms/${room}/${opponentId}/score`).set(oppData.score + 1);
+            }
+
+            setTimeout(() => {
+              db.ref(`rooms/${room}/${playerId}/move`).set(null);
+              db.ref(`rooms/${room}/${opponentId}/move`).set(null);
+              document.getElementById("status").innerText = "Pilih lagi!";
+            }, 3000);
+          }
+        });
+      }
+
+      function makeMove(choice) {
+        db.ref(`rooms/${room}/${playerId}/move`).set(choice);
+        document.getElementById("status").innerText = "Menunggu lawan...";
+      }
+
+      function checkWinner(a, b) {
+        if (a === b) return "draw";
+        if (
+          (a === "batu" && b === "gunting") ||
+          (a === "gunting" && b === "kertas") ||
+          (a === "kertas" && b === "batu")
+        ) return a;
+        return b;
+      }
+    </script>
+  </body>
+</html>
