@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Batu Gunting Kertas Online</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        text-align: center;
+        margin: 20px;
+        padding: 0;
+      }
+
+      input,
+      button {
+        padding: 10px;
+        font-size: 18px;
+        margin: 10px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        width: 80%;
+        max-width: 300px;
+      }
+
+      #gameArea button {
+        display: block;
+        width: 80%;
+        max-width: 300px;
+        margin: 10px auto;
+        font-size: 20px;
+        padding: 12px;
+      }
+
+      #scores p {
+        font-size: 18px;
+        margin: 5px 0;
+      }
+
+      @media (max-width: 600px) {
+        h1 {
+          font-size: 24px;
+        }
+
+        button,
+        input {
+          font-size: 16px;
+          padding: 8px;
+        }
+
+        #scores p {
+          font-size: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🪨✂️📄 Batu Gunting Kertas</h1>
+
+    <input type="text" id="playerName" placeholder="🧑‍🎤 Nama kamu" />
+    <input type="text" id="roomCode" placeholder="Kode room" />
+    <button onclick="joinRoom()">Gabung Room</button>
+
+    <div id="gameArea" style="display: none">
+      <h2>Pilih:</h2>
+      <button onclick="makeMove('batu')">🪨 Batu</button>
+      <button onclick="makeMove('gunting')">✂️ Gunting</button>
+      <button onclick="makeMove('kertas')">📄 Kertas</button>
+
+      <h3 id="status">Menunggu lawan masuk...</h3>
+
+      <div id="scores">
+        <p><span id="myName">Kamu</span>: <span id="myScore">0</span></p>
+        <p>
+          <span id="opponentName">Lawan</span>:
+          <span id="opponentScore">0</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+    <script>
+      const firebaseConfig = {
+        apiKey: "AIzaSyCXU7oqo3m3ry7om9qQ5zfOGTu-mL_YOrc",
+        authDomain: "realtime-database-99f23.firebaseapp.com",
+        databaseURL:
+          "https://realtime-database-99f23-default-rtdb.firebaseio.com",
+        projectId: "realtime-database-99f23",
+        storageBucket: "realtime-database-99f23.appspot.com",
+        messagingSenderId: "642043922874",
+        appId: "1:642043922874:web:4df5d383e2867bcd2cf583",
+      };
+
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.database();
+
+      let playerId = "player_" + Math.floor(Math.random() * 10000);
+      let room = "";
+
+      function joinRoom() {
+        const name = document.getElementById("playerName").value.trim();
+        room = document.getElementById("roomCode").value.trim();
+        if (!name || !room) return alert("Isi nama dan kode room!");
+
+        const ref = db.ref("rooms/" + room + "/" + playerId);
+        ref.set({ move: null, score: 0, name: name });
+
+        document.getElementById("gameArea").style.display = "block";
+        document.getElementById("status").innerText = "Menunggu lawan masuk...";
+        listenForOpponent();
+      }
+
+      function makeMove(choice) {
+        db.ref(`rooms/${room}/${playerId}`).update({ move: choice });
+        document.getElementById("status").innerText =
+          "Menunggu lawan memilih...";
+      }
+
+      function listenForOpponent() {
+        db.ref("rooms/" + room).on("value", (snapshot) => {
+          const data = snapshot.val();
+          if (!data) return;
+
+          const players = Object.keys(data);
+          if (players.length < 2) {
+            document.getElementById("status").innerText =
+              "Menunggu lawan masuk...";
+            return;
+          }
+
+          const [p1, p2] = players;
+          const move1 = data[p1].move;
+          const move2 = data[p2].move;
+
+          const myData = data[playerId];
+          const opponentId = players.find((id) => id !== playerId);
+          const opponentData = data[opponentId];
+
+          document.getElementById("myName").innerText = myData.name || "Kamu";
+          document.getElementById("opponentName").innerText =
+            opponentData?.name || "Lawan";
+          document.getElementById("myScore").innerText = myData.score || 0;
+          document.getElementById("opponentScore").innerText =
+            opponentData?.score || 0;
+
+          if (!move1 && !move2) {
+            document.getElementById("status").innerText = `${
+              opponentData?.name || "Lawan"
+            } sudah masuk, ayo mulai!`;
+          }
+
+          if (move1 && move2) {
+            let result = checkWinner(move1, move2);
+            if (result === "draw") {
+              document.getElementById(
+                "status"
+              ).innerText = `Seri! (${move1} vs ${move2})`;
+            } else {
+              const winner = result === move1 ? p1 : p2;
+              const winnerName = data[winner]?.name || "Pemenang";
+
+              if (winner === playerId) {
+                document.getElementById("status").innerText = "🎉 Kamu menang!";
+                db.ref(`rooms/${room}/${playerId}/score`).set(myData.score + 1);
+              } else {
+                document.getElementById(
+                  "status"
+                ).innerText = `😢 Kamu kalah! ${winnerName} menang.`;
+                db.ref(`rooms/${room}/${opponentId}/score`).set(
+                  opponentData.score + 1
+                );
+              }
+            }
+
+            setTimeout(() => {
+              db.ref(`rooms/${room}/${p1}`).update({ move: null });
+              db.ref(`rooms/${room}/${p2}`).update({ move: null });
+              document.getElementById("status").innerText = "Pilih lagi!";
+            }, 3000);
+          }
+        });
+      }
+
+      function checkWinner(a, b) {
+        if (a === b) return "draw";
+        if (
+          (a === "batu" && b === "gunting") ||
+          (a === "gunting" && b === "kertas") ||
+          (a === "kertas" && b === "batu")
+        ) {
+          return a;
+        } else {
+          return b;
+        }
+      }
+    </script>
+  </body>
+</html>
